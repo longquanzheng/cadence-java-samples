@@ -24,7 +24,6 @@ import com.uber.cadence.client.WorkflowClient;
 import com.uber.cadence.client.WorkflowOptions;
 import com.uber.cadence.common.RetryOptions;
 import com.uber.cadence.worker.Worker;
-import com.uber.cadence.workflow.Functions;
 import com.uber.cadence.workflow.Workflow;
 import com.uber.cadence.workflow.WorkflowMethod;
 import java.time.Duration;
@@ -55,18 +54,22 @@ public class HelloActivityRetry {
 
     /**
      * To enable activity retry set {@link RetryOptions} on {@link ActivityOptions}. It also works
-     * for activities invoked through {@link com.uber.cadence.workflow.Async#invoke(Functions.Proc)}
-     * and for child workflows.
+     * for activities invoked through and for child workflows.
      */
     private final GreetingActivities activities =
         Workflow.newActivityStub(
             GreetingActivities.class,
             new ActivityOptions.Builder()
+                .setHeartbeatTimeout(Duration.ofHours(1))
                 .setScheduleToCloseTimeout(Duration.ofSeconds(10))
+                .setStartToCloseTimeout(Duration.ofSeconds(20))
+                .setScheduleToStartTimeout(Duration.ofSeconds(10))
                 .setRetryOptions(
                     new RetryOptions.Builder()
                         .setInitialInterval(Duration.ofSeconds(1))
-                        .setExpiration(Duration.ofMinutes(1))
+                        .setBackoffCoefficient(1)
+                        // .setExpiration(Duration.ofMinutes(1))
+                        .setMaximumAttempts(100)
                         .setDoNotRetry(IllegalArgumentException.class)
                         .build())
                 .build());
@@ -83,17 +86,24 @@ public class HelloActivityRetry {
     private long lastInvocationTime;
 
     @Override
-    public synchronized String composeGreeting(String greeting, String name) {
-      if (lastInvocationTime != 0) {
-        long timeSinceLastInvocation = System.currentTimeMillis() - lastInvocationTime;
-        System.out.print(timeSinceLastInvocation + " milliseconds since last invocation. ");
+    public String composeGreeting(String greeting, String name) {
+      //      if (lastInvocationTime != 0) {
+      //        long timeSinceLastInvocation = System.currentTimeMillis() - lastInvocationTime;
+      //        System.out.print(timeSinceLastInvocation + " milliseconds since last invocation. ");
+      //      }
+      //      lastInvocationTime = System.currentTimeMillis();
+      //      if (++callCount < 4) {
+      //        System.out.println("composeGreeting activity is going to fail");
+      //        throw new IllegalStateException("not yet");
+      //      }
+      //      System.out.println("composeGreeting activity is going to complete");
+      System.out.println("in greeting, now sleeping 60 s");
+      try {
+        Thread.sleep(Duration.ofHours(1).toMillis());
+      } catch (InterruptedException e) {
+        System.out.println("exception..." + e.getMessage());
       }
-      lastInvocationTime = System.currentTimeMillis();
-      if (++callCount < 4) {
-        System.out.println("composeGreeting activity is going to fail");
-        throw new IllegalStateException("not yet");
-      }
-      System.out.println("composeGreeting activity is going to complete");
+      System.out.println("done greeting");
       return greeting + " " + name + "!";
     }
   }
@@ -115,7 +125,7 @@ public class HelloActivityRetry {
     WorkflowOptions workflowOptions =
         new WorkflowOptions.Builder()
             .setTaskList(TASK_LIST)
-            .setExecutionStartToCloseTimeout(Duration.ofSeconds(30))
+            .setExecutionStartToCloseTimeout(Duration.ofMinutes(2))
             .build();
     GreetingWorkflow workflow =
         workflowClient.newWorkflowStub(GreetingWorkflow.class, workflowOptions);
